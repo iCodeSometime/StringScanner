@@ -8,62 +8,86 @@ namespace SqlCompiler.StringScanner
 {
     public class Scanner : System.IO.StringReader
     {
-        private readonly List<Regex> _delimiters = new List<Regex>();
-        private StringBuilder _buffer = new StringBuilder();
+        private StringBuilder buffer = new StringBuilder();
 
         public Scanner(string content) : base(content) { }
 
         // This method is stateful, resetting every other time it is called.
         // The first time, it reads until a delimiter is matched.
         // The second time, it reads until the end of the delimiter, and 
-        // resets it's state (the _buffer).
-        public string ReadNextWordOrDelim()
+        // resets it's state (the this.buffer).
+        public string ReadNextWordOrDelim(IEnumerable<Regex> delimiters)
         {
             string ret;
-            // If we're in the middle of matching a closing delimiter
-            if (_delimiters.Any(r => r.IsMatch(_buffer.ToString())))
+
+            do
             {
-                ret =  ReadNextDelim();
-            }
-            else
-            {
-                ret = ReadNextWord();
-            }
+                // If we're in the middle of matching a closing delimiter
+                if (delimiters.Any(r => r.IsMatch(this.buffer.ToString())))
+                {
+                    ret = ReadNextDelim(delimiters);
+                    this.buffer.Clear();
+                }
+                else
+                {
+                    ret = ReadNextWord(delimiters);
+                }
+            } while (String.IsNullOrEmpty(ret) && Peek() != -1);
             return ret;
         }
+
         /// <summary>
         /// Reads the next word.
         /// </summary>
         /// <returns>The next word.</returns>
-        private string ReadNextWord()
+        private string ReadNextWord(IEnumerable<Regex> delimiters)
         {
-            _buffer.Clear();
             int next;
             do
             {
                 next = Read();
                 if (next == -1)
                 {
-                    return _buffer.ToString();
+                    return this.buffer.ToString();
                 }
-                _buffer.Append(next);
-            } while (GetDelimStartEnd(_buffer.ToString()).HasValue);
+                this.buffer.Append((char)next);
+            } while (!GetDelimLocation(this.buffer.ToString(), delimiters).HasValue);
 
-            var (start, end) = GetDelimStartEnd(_buffer.ToString()).Value;
-            return _buffer.ToString().Substring(0, start);
+            var (start, length) = GetDelimLocation(this.buffer.ToString(), delimiters).Value;
+            return this.buffer.ToString().Substring(0, start);
         }
 
         /// <summary>
         /// Reads the next delimiter. Assumes the buffer has previous content.
         /// </summary>
         /// <returns>The next delimiter.</returns>
-        private string ReadNextDelim()
+        private string ReadNextDelim(IEnumerable<Regex> delimiters)
         {
-            while (GetDelimStartEnd(_buffer.ToString() + Peek())?.end == _buffer.Length + 1)
+            while (KeepReadingDelim(delimiters))
             {
-                _buffer.Append(Read());
+                this.buffer.Append((char)Read());
             }
-            return JustTheDelim(_buffer.ToString());
+            return JustTheDelim(this.buffer.ToString(), delimiters);
+        }
+
+        /// <summary>
+        /// Should we keep adding to the delimiter?
+        /// </summary>
+        /// <remarks>
+        /// Assumes that GetDelimLocation will return non-null data at the current state
+        /// </remarks>
+        /// <returns><c>true</c>, if the next character can be included in the delimiter, <c>false</c> otherwise.</returns>
+        private bool KeepReadingDelim(IEnumerable<Regex> delimiters)
+        {
+            int next = Peek();
+            if (next == -1)
+            {
+                return false;
+            }
+            var (_, oldLength) = GetDelimLocation(this.buffer.ToString(), delimiters).Value;
+            var (_, newLength) = GetDelimLocation(this.buffer.ToString() + (char)next, delimiters).Value;
+
+            return newLength > oldLength;
         }
 
         /// <summary>
@@ -71,14 +95,18 @@ namespace SqlCompiler.StringScanner
         /// </summary>
         /// <returns>The beginning and end of the longest delimiter</returns>
         /// <param name="content">The string to check for a delimiter.</param>
-        private (int start, int end)? GetDelimStartEnd(string content)
+        private (int start, int length)? GetDelimLocation(string content, IEnumerable<Regex> delimiters)
         {
-            Match maxMatch = _delimiters
+            Match maxMatch = delimiters
                 .SelectMany(r => (IEnumerable<Match>) r.Matches(content))
                 .OrderByDescending(m => m.Length)
                 .FirstOrDefault();
            
-            return (maxMatch.Index, maxMatch.Index + maxMatch.Length);
+            if (maxMatch == null)
+            {
+                return null;
+            }
+            return (maxMatch.Index, maxMatch.Length);
         }
 
         /// <summary>
@@ -86,20 +114,16 @@ namespace SqlCompiler.StringScanner
         /// </summary>
         /// <returns>The text of the longest delimiter</returns>
         /// <param name="content">The string to pull the delimiter from.</param>
-        private string JustTheDelim(string content)
+        private string JustTheDelim(string content, IEnumerable<Regex> delimiters)
         {
             string ret = "";
-            var startEnd = GetDelimStartEnd(content);
+            var startEnd = GetDelimLocation(content, delimiters);
             if (startEnd.HasValue)
             {
-                var (start, end) = startEnd.Value;
-                ret = content.Substring(start, end);
+                var (start, length) = startEnd.Value;
+                ret = content.Substring(start, length);
             }
             return ret;
         }
-
-        public void AddDelimiter(Regex delim) { _delimiters.Add(delim); }
-        public void ClearDelimiters() { _delimiters.Clear(); }
-        public void RemoveDelimiter(Regex delim) { _delimiters.Remove(delim); }
     }
 }
