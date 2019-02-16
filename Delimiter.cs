@@ -12,6 +12,10 @@ namespace SqlCompiler.StringScanner
         bool IsMatch(string toMatch);
     }
 
+    /// <summary>
+    ///     A Colection of delimiter objects. It also implements IDelimiter.
+    ///     A match is defined as the longest match (if any) of any element.
+    /// </summary>
     public abstract class DelimiterCollection<T> : ICollection<T>, IDelimiter
         where T : IDelimiter
     {
@@ -23,12 +27,17 @@ namespace SqlCompiler.StringScanner
             Delimiters = delimiters;
         }
 
+        /// <summary>
+        ///     Does any element match the given string?
+        /// </summary>
+        /// <returns><c>true</c>, if there is any match, <c>false</c> otherwise.</returns>
+        /// <param name="content">The string to match.</param>
         public bool IsMatch(string content)
         {
             return Delimiters.Any(d => d.IsMatch(content));
         }
         /// <summary>
-        /// Returns the longest match of a given string.
+        ///     Returns the longest match of a given string.
         /// </summary>
         /// <returns>The longest match.</returns>
         /// <param name="content">The string to match.</param>
