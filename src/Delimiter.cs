@@ -1,6 +1,6 @@
-﻿/* Copyright (C) 2019 Kenneth Cochran
+﻿/* StringScanner: Scan a string for words split by a regex delimiter.
  *
- * This file is part of StringScanner.
+ * Copyright (C) 2019 Kenneth Cochran
  *
  * StringScanner is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
